@@ -8,11 +8,10 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.jwt.*;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
-import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.expression.WebExpressionAuthorizationManager;
 
+import static org.springframework.security.config.Customizer.withDefaults;
 
 
 @Configuration
@@ -22,55 +21,25 @@ public class SecurityConfig {
     private String issuer;
     @Value("${spring.security.oauth2.resourceserver.jwt.audiences}")
     private String audience;
+    @Value("${spring.security.oauth2.resourceserver.opaquetoken.client-id}")
+    private String clientId;
 
     @Bean
     public SecurityFilterChain configure(HttpSecurity http) throws Exception {
-        return http
-                .oauth2ResourceServer(oauth2 -> oauth2
-                        .jwt(jwt -> jwt
-                                .jwtAuthenticationConverter(jwtAuthenticationConverter())
-                                .decoder(jwtDecoder())
-                        ))
-                .securityMatcher("/**")
-                .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/","/authenticate").permitAll()
-                        .requestMatchers("/api/public").permitAll()
-                        .requestMatchers("/api/private").authenticated()
-                        .requestMatchers("/api/private-scoped").hasAuthority("read:messages")
+       return http
+               .oauth2ResourceServer(oauth2 -> oauth2.jwt(withDefaults()))
+               .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers("/").permitAll()
                         .requestMatchers("/resource/{name}").access(new WebExpressionAuthorizationManager("#name == authentication.name"))
                         .anyRequest().authenticated()
                 )
-                .sessionManagement(session-> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .build();
+               .sessionManagement(session-> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+               .build();
 
     }
 
 
-    public JwtAuthenticationConverter jwtAuthenticationConverter() {
-        /*
-        In deze methode overschrijven we de standaard JwtAuthenticationConverter met een nieuwe jwtAuthenticationConverter.
-        Dit is nodig om aan te geven dat we het "permissions" attribuut in de JWT willen gebruiken om de authorities uit te extraheren.
-        Daarnaast kunnen we ook meteen de prefix op een lege string zetten, zodat we niet "SCOPE_" voor onze authorities hoeven zetten.
-        Uiteindelijk kunnen we hiermee in de HttpSecurity aangeven dat alleen gebruikers met een bepaalde "permission"
-        een endpoint mogen aanspreken, zoals:
-
-                .requestMatchers("/api/private-scoped").hasAuthority("read:messages")
-
-         Je ziet dat hier de "hasAuthority" methode gebruikt wordt, terwijl we het over "permissions" hebben.
-         Dat kan, omdat we in deze methode instellen dat "permissions" als "authorities" gelezen worden.
-         */
-        JwtGrantedAuthoritiesConverter grantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
-        grantedAuthoritiesConverter.setAuthoritiesClaimName("permissions");
-        grantedAuthoritiesConverter.setAuthorityPrefix("");
-
-        JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();
-        jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(grantedAuthoritiesConverter);
-
-        return jwtAuthenticationConverter;
-    }
-
-
-
+    @Bean
     public JwtDecoder jwtDecoder(){
         /*
         In deze methode valideren we de JWT op echtheid.
@@ -87,6 +56,5 @@ public class SecurityConfig {
 
         return jwtDecoder;
     }
-
 
 }
